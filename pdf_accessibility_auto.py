@@ -579,7 +579,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Best-effort accessibility improvements for a tagged PDF.")
     parser.add_argument("input_pdf", type=Path, help="Tagged input PDF")
     parser.add_argument("-o", "--output", type=Path, help="Output PDF path")
-    parser.add_argument("--title", default="Thesis",help="Document title metadata")
+    parser.add_argument("--title", default="Thesis", help='Document title metadata (default: "Thesis")')
     parser.add_argument("--lang", default="en-US", help="Document language")
     parser.add_argument(
         "--disable-heading-promotion",
@@ -595,7 +595,7 @@ def main() -> int:
 
     input_pdf = args.input_pdf.resolve()
     output_pdf = args.output.resolve() if args.output else input_pdf.with_name(f"{input_pdf.stem}.accessible.pdf")
-    title = args.title if args.title else input_pdf.stem
+    title = args.title
 
     visible_by_page = extract_visible_captions(input_pdf)
     heading_candidates = detect_heading_candidates(input_pdf)
