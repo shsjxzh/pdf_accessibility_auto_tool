@@ -1,6 +1,9 @@
-# Accessibility Auto Tool for PDF to Satisfy Title II ADA Accessibility Requirements.
+# PDF Accessibility Tool for Title II ADA Requirements
 
-Best-effort accessibility cleanup tool for already tagged PDFs.
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+Best-effort remediation tool for already tagged PDFs, designed to help move exported PDFs closer to Title II ADA accessibility requirements.
 
 You can use either Acrobat Pro or opensource tools to generate such a tagged PDF.
 
@@ -25,7 +28,7 @@ The script works on PDFs that already contain a `/StructTreeRoot` (by tagging) a
 
 This tool does not build a full accessibility tag tree from an untagged PDF.
 
-If a PDF does not already have a valid `/StructTreeRoot`, this script is not the right starting point.
+If a PDF does not already have a valid `/StructTreeRoot`, this script is not the right starting point. Please use either Acrobat Pro or opensource tools to generate such a tagged PDF.
 
 ## Requirements
 
