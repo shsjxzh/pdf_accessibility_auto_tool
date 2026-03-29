@@ -23,7 +23,7 @@ The script works on PDFs that already contain a `/StructTreeRoot` (by tagging) a
 - removing nested `/Alt`, `/ActualText`, and `/Summary` values under those elements
 - promoting missing table headers from `TD` to `TH`
 - promoting likely headings from `P` to `H1`, `H2`, and `H3`
-- setting PDF title metadata, with `"Thesis"` as the default title
+- setting PDF title metadata
 - setting PDF language metadata
 
 ## What it does not do
@@ -49,8 +49,6 @@ pip install -r requirements.txt
 ```bash
 python pdf_accessibility_auto.py input.pdf -o output.pdf
 ```
-
-By default, the output PDF title metadata is set to `"Thesis"`.
 
 Set title and language:
 
