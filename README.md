@@ -5,7 +5,7 @@
 
 Best-effort remediation tool for already tagged PDFs, designed to help move exported PDFs closer to Title II ADA accessibility requirements.
 
-![Illustration of the PDF accessibility tool workflow](img/accessibility_tool.png)
+<img src="img/accessibility_tool.png" alt="Illustration of the PDF accessibility tool workflow" width="720">
 
 You can use either Acrobat Pro or opensource tools to generate such a tagged PDF.
 
