@@ -64,7 +64,7 @@ python pdf_accessibility_auto.py input.pdf -o output.pdf --disable-heading-promo
 
 ## Output
 
-The script prints a JSON summary with:
+Besides the output PDF, the script prints a JSON summary with:
 
 - missing alt-text counts before and after
 - number of promoted heading tags
