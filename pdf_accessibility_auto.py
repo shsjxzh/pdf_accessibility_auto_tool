@@ -458,10 +458,8 @@ def promote_headings(reader: PdfReader, heading_candidates: dict[int, list[str]]
         if not levels or not p_by_page.get(page_num):
             continue
         page_ps = p_by_page[page_num]
-        # Skip the page-number paragraph if present and only retag the next few top-of-page paragraphs.
-        start_idx = 1 if len(page_ps) > 1 else 0
         for idx, level in enumerate(levels):
-            target_idx = start_idx + idx
+            target_idx = idx
             if target_idx >= len(page_ps):
                 break
             obj = page_ps[target_idx].get_object()
