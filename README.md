@@ -1,6 +1,8 @@
-# PDF Accessibility Auto Tool
+# Accessibility Auto Tool for PDF to Satisfy Title II ADA Accessibility Requirements.
 
-Best-effort accessibility cleanup for already tagged PDFs.
+Best-effort accessibility cleanup tool for already tagged PDFs.
+
+You can use either Acrobat Pro or opensource tools to generate such a tagged PDF.
 
 ## Files
 
@@ -9,7 +11,7 @@ Best-effort accessibility cleanup for already tagged PDFs.
 
 ## What the script does
 
-The script works on PDFs that already contain a `/StructTreeRoot` and attempts to improve common accessibility gaps by:
+The script works on PDFs that already contain a `/StructTreeRoot` (by tagging) and attempts to improve common accessibility gaps by:
 
 - adding `/Alt` text to tagged `Figure`, `Table`, and `Formula` elements
 - adding `/Summary` text to tagged tables
