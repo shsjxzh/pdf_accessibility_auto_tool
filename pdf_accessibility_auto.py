@@ -337,11 +337,6 @@ def alt_from_caption(element: StructElement, caption: VisibleCaption | None, tab
         if table_headers:
             text += f" Headers: {table_headers}."
         return text
-    if element.tag_type == "Formula":
-        body = clean_formula_text(caption.body)
-        if body:
-            return f"Formula near {caption.kind} {caption.label}. {body}"
-        return f"Formula near {caption.kind} {caption.label}."
     return f"{caption.kind} {caption.label}. {caption.body}"
 
 
