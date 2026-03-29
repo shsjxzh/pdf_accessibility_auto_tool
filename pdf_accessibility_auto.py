@@ -10,7 +10,6 @@ It can:
 - promote missing table header cells from TD to TH
 - promote likely heading paragraphs to H1/H2/H3
 - set document title and language metadata
-- optionally keep visible running page numbers while removing overlapping annotations
 
 It does not build a full accessibility tag tree from an untagged PDF.
 """
@@ -96,78 +95,6 @@ def clean_formula_text(text: str) -> str:
     text = re.sub(r"^\s*[()]+\s*", "", text)
     text = re.sub(r"\s*[()]+\s*$", "", text)
     return normalize(text)
-
-
-def to_roman_lower(num: int) -> str:
-    vals = [
-        (1000, "m"), (900, "cm"), (500, "d"), (400, "cd"),
-        (100, "c"), (90, "xc"), (50, "l"), (40, "xl"),
-        (10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i"),
-    ]
-    out = []
-    for value, symbol in vals:
-        while num >= value:
-            out.append(symbol)
-            num -= value
-    return "".join(out)
-
-
-def compute_page_labels(reader: PdfReader) -> dict[int, str]:
-    total = len(reader.pages)
-    labels = {i: str(i + 1) for i in range(total)}
-    page_labels = reader.trailer["/Root"].get("/PageLabels")
-    if page_labels is None:
-        return labels
-
-    nums = page_labels.get_object().get("/Nums")
-    if not isinstance(nums, ArrayObject):
-        return labels
-
-    starts = []
-    for i in range(0, len(nums), 2):
-        start = int(nums[i])
-        spec = nums[i + 1].get_object() if isinstance(nums[i + 1], IndirectObject) else nums[i + 1]
-        starts.append((start, spec))
-    starts.sort(key=lambda item: item[0])
-
-    for idx, (start, spec) in enumerate(starts):
-        end = starts[idx + 1][0] if idx + 1 < len(starts) else total
-        prefix = str(spec.get("/P") or "")
-        style = str(spec.get("/S") or "")
-        current = int(spec.get("/St", 1))
-        for page_index in range(start, end):
-            if style == "/r":
-                label = to_roman_lower(current)
-            elif style == "/D":
-                label = str(current)
-            else:
-                label = ""
-            labels[page_index] = prefix + label
-            current += 1
-    return labels
-
-
-def find_page_number_rects(pdf_path: Path, labels_by_index: dict[int, str]) -> dict[int, list[tuple[float, float, float, float]]]:
-    pdf = fitz.open(pdf_path)
-    rects_by_page: dict[int, list[tuple[float, float, float, float]]] = defaultdict(list)
-    for page_index in range(pdf.page_count):
-        label = labels_by_index.get(page_index, "").strip()
-        if not label:
-            continue
-        # Keep visible Roman front-matter page numbers intact.
-        if re.fullmatch(r"[ivxlcdm]+", label.lower()):
-            continue
-        page = pdf.load_page(page_index)
-        page_rect = page.rect
-        for rect in page.search_for(label):
-            if rect.width > 50 or rect.height > 25:
-                continue
-            near_top = rect.y1 <= 60
-            near_bottom = rect.y0 >= page_rect.height - 60
-            if near_top or near_bottom:
-                rects_by_page[page_index].append((rect.x0, rect.y0, rect.x1, rect.y1))
-    pdf.close()
-    return rects_by_page
 
 
 def extract_visible_captions(pdf_path: Path) -> dict[int, list[VisibleCaption]]:
@@ -614,38 +541,6 @@ def apply_document_metadata(writer: PdfWriter, title: str, language: str) -> Non
     writer.root_object[NameObject("/ViewerPreferences")] = viewer_prefs
 
 
-def strip_page_number_annotations(reader: PdfReader, rects_by_page: dict[int, list[tuple[float, float, float, float]]]) -> int:
-    removed = 0
-    for page_index, rects in rects_by_page.items():
-        if page_index >= len(reader.pages):
-            continue
-        page = reader.pages[page_index]
-        annots = page.get("/Annots")
-        if not isinstance(annots, ArrayObject):
-            continue
-        kept = ArrayObject()
-        for annot_ref in annots:
-            annot = annot_ref.get_object() if isinstance(annot_ref, IndirectObject) else annot_ref
-            rect = annot.get("/Rect") if hasattr(annot, "get") else None
-            remove = False
-            if isinstance(rect, ArrayObject) and len(rect) == 4:
-                ax0, ay0, ax1, ay1 = [float(x) for x in rect]
-                annot_rect = fitz.Rect(ax0, ay0, ax1, ay1)
-                for target in rects:
-                    if annot_rect.intersects(fitz.Rect(target)):
-                        remove = True
-                        break
-            if remove:
-                removed += 1
-            else:
-                kept.append(annot_ref)
-        if kept:
-            page[NameObject("/Annots")] = kept
-        elif "/Annots" in page:
-            del page["/Annots"]
-    return removed
-
-
 def count_missing_alt(reader: PdfReader) -> dict[str, int]:
     struct = reader.trailer["/Root"].get("/StructTreeRoot")
     if struct is None:
@@ -687,11 +582,6 @@ def main() -> int:
     parser.add_argument("--title", help="Document title metadata")
     parser.add_argument("--lang", default="en-US", help="Document language")
     parser.add_argument(
-        "--clean-running-page-numbers",
-        action="store_true",
-        help="Keep visible running page numbers, but remove overlapping annotations in header/footer regions",
-    )
-    parser.add_argument(
         "--disable-heading-promotion",
         action="store_true",
         help="Do not retag likely headings as H1/H2/H3",
@@ -707,13 +597,6 @@ def main() -> int:
     output_pdf = args.output.resolve() if args.output else input_pdf.with_name(f"{input_pdf.stem}.accessible.pdf")
     title = args.title if args.title else input_pdf.stem
 
-
-    page_number_rects: dict[int, list[tuple[float, float, float, float]]] = {}
-    if args.clean_running_page_numbers:
-        source_reader = PdfReader(str(input_pdf))
-        page_labels = compute_page_labels(source_reader)
-        page_number_rects = find_page_number_rects(input_pdf, page_labels)
-
     visible_by_page = extract_visible_captions(input_pdf)
     heading_candidates = detect_heading_candidates(input_pdf)
     fitz_pdf = fitz.open(input_pdf)
@@ -726,9 +609,6 @@ def main() -> int:
     headings_promoted = 0
     if not args.disable_heading_promotion:
         headings_promoted = promote_headings(reader, heading_candidates)
-    page_number_annots_removed = 0
-    if page_number_rects:
-        page_number_annots_removed = strip_page_number_annotations(reader, page_number_rects)
     stats = assign_alt_text(reader, fitz_pdf, visible_by_page)
     after = count_missing_alt(reader)
     fitz_pdf.close()
@@ -744,13 +624,10 @@ def main() -> int:
             {
                 "input_pdf": str(input_pdf),
                 "output_pdf": str(output_pdf),
-                "clean_running_page_numbers": args.clean_running_page_numbers,
                 "missing_alt_before": before,
                 "missing_alt_after": after,
                 "table_header_cells_promoted": table_headers_fixed,
                 "headings_promoted": headings_promoted,
-                "page_number_annots_removed": page_number_annots_removed,
-                "page_number_rects_redacted": 0,
                 "title": title,
                 "lang": args.lang,
                 "assigned": stats["assigned"],
