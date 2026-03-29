@@ -20,8 +20,6 @@ The script works on PDFs that already contain a `/StructTreeRoot` (by tagging) a
 - promoting likely headings from `P` to `H1`, `H2`, and `H3`
 - setting PDF title metadata
 - setting PDF language metadata
-- optionally deleting selected pages
-- optionally removing visible running page numbers and overlapping annotations
 
 ## What it does not do
 
@@ -53,18 +51,6 @@ Set title and language:
 python pdf_accessibility_auto.py input.pdf -o output.pdf --title "Document Title" --lang en-US
 ```
 
-Delete one or more pages before processing:
-
-```bash
-python pdf_accessibility_auto.py input.pdf -o output.pdf --delete-page 2 --delete-page 5
-```
-
-Remove visible running page numbers:
-
-```bash
-python pdf_accessibility_auto.py input.pdf -o output.pdf --clean-running-page-numbers
-```
-
 Disable some heuristic transformations:
 
 ```bash
@@ -78,11 +64,9 @@ The script prints a JSON summary with:
 - missing alt-text counts before and after
 - number of promoted heading tags
 - number of promoted table header cells
-- number of running page-number regions redacted
 - metadata values applied
 
 ## Notes
 
 - The heading and table-header fixes are heuristic.
-- The page-number cleanup removes visible page numbers when enabled.
 - This tool is intended as a practical post-processing step, not a PDF/UA certification pipeline.
