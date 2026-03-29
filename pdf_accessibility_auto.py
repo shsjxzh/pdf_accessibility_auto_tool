@@ -10,7 +10,6 @@ It can:
 - promote missing table header cells from TD to TH
 - promote likely heading paragraphs to H1/H2/H3
 - set document title and language metadata
-- optionally delete selected pages
 - optionally keep visible running page numbers while removing overlapping annotations
 
 It does not build a full accessibility tag tree from an untagged PDF.
@@ -99,10 +98,6 @@ def clean_formula_text(text: str) -> str:
     return normalize(text)
 
 
-def temp_path_for(pdf_path: Path, suffix: str) -> Path:
-    return pdf_path.with_name(f"{pdf_path.stem}.{suffix}.tmp.pdf")
-
-
 def to_roman_lower(num: int) -> str:
     vals = [
         (1000, "m"), (900, "cm"), (500, "d"), (400, "cd"),
@@ -173,56 +168,6 @@ def find_page_number_rects(pdf_path: Path, labels_by_index: dict[int, str]) -> d
                 rects_by_page[page_index].append((rect.x0, rect.y0, rect.x1, rect.y1))
     pdf.close()
     return rects_by_page
-
-
-def delete_pages(pdf_path: Path, pages_to_delete: list[int]) -> Path:
-    if not pages_to_delete:
-        return pdf_path
-    pdf = fitz.open(pdf_path)
-    zero_based = sorted({page - 1 for page in pages_to_delete if 1 <= page <= pdf.page_count}, reverse=True)
-    if not zero_based:
-        pdf.close()
-        return pdf_path
-    for page_index in zero_based:
-        pdf.delete_page(page_index)
-    out_path = temp_path_for(pdf_path, "pages-deleted")
-    pdf.save(out_path, garbage=4, deflate=True)
-    pdf.close()
-    return out_path
-
-
-def cleanup_formula_glyph_artifacts(pdf_path: Path) -> tuple[Path, int]:
-    pdf = fitz.open(pdf_path)
-    removed = 0
-    replacements = {0x2208, 0x2209}
-    for page in pdf:
-        rects: list[fitz.Rect] = []
-        raw = page.get_text("rawdict")
-        for block in raw.get("blocks", []):
-            for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    for ch in span.get("chars", []):
-                        char = ch.get("c", "")
-                        if len(char) == 1:
-                            if ord(char) in replacements:
-                                rect = fitz.Rect(ch["bbox"])
-                                rect = fitz.Rect(rect.x0 - 0.2, rect.y0 - 0.2, rect.x1, rect.y1 + 0.2)
-                                rects.append(rect)
-                        if ch.get("c") in {"（", "）"}:
-                            rect = fitz.Rect(ch["bbox"])
-                            rects.append(fitz.Rect(rect.x0 - 0.5, rect.y0 - 0.5, rect.x1 + 0.5, rect.y1 + 0.5))
-        for rect in rects:
-            page.add_redact_annot(rect, fill=(1, 1, 1))
-        if rects:
-            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
-            removed += len(rects)
-    if removed == 0:
-        pdf.close()
-        return pdf_path, 0
-    out_path = temp_path_for(pdf_path, "formula-glyph-clean")
-    pdf.save(out_path, garbage=4, deflate=True)
-    pdf.close()
-    return out_path, removed
 
 
 def extract_visible_captions(pdf_path: Path) -> dict[int, list[VisibleCaption]]:
@@ -742,13 +687,6 @@ def main() -> int:
     parser.add_argument("--title", help="Document title metadata")
     parser.add_argument("--lang", default="en-US", help="Document language")
     parser.add_argument(
-        "--delete-page",
-        action="append",
-        type=int,
-        default=[],
-        help="1-based page number to delete before processing; repeatable",
-    )
-    parser.add_argument(
         "--clean-running-page-numbers",
         action="store_true",
         help="Keep visible running page numbers, but remove overlapping annotations in header/footer regions",
@@ -769,31 +707,17 @@ def main() -> int:
     output_pdf = args.output.resolve() if args.output else input_pdf.with_name(f"{input_pdf.stem}.accessible.pdf")
     title = args.title if args.title else input_pdf.stem
 
-    working_pdf = input_pdf
-    temp_paths: list[Path] = []
 
     page_number_rects: dict[int, list[tuple[float, float, float, float]]] = {}
     if args.clean_running_page_numbers:
-        source_reader = PdfReader(str(working_pdf))
+        source_reader = PdfReader(str(input_pdf))
         page_labels = compute_page_labels(source_reader)
-        page_number_rects = find_page_number_rects(working_pdf, page_labels)
+        page_number_rects = find_page_number_rects(input_pdf, page_labels)
 
-    if args.delete_page:
-        deleted_pdf = delete_pages(working_pdf, args.delete_page)
-        if deleted_pdf != working_pdf:
-            temp_paths.append(deleted_pdf)
-            working_pdf = deleted_pdf
-
-    formula_glyph_artifacts_removed = 0
-    cleaned_pdf, formula_glyph_artifacts_removed = cleanup_formula_glyph_artifacts(working_pdf)
-    if cleaned_pdf != working_pdf:
-        temp_paths.append(cleaned_pdf)
-        working_pdf = cleaned_pdf
-
-    visible_by_page = extract_visible_captions(working_pdf)
-    heading_candidates = detect_heading_candidates(working_pdf)
-    fitz_pdf = fitz.open(working_pdf)
-    reader = PdfReader(str(working_pdf))
+    visible_by_page = extract_visible_captions(input_pdf)
+    heading_candidates = detect_heading_candidates(input_pdf)
+    fitz_pdf = fitz.open(input_pdf)
+    reader = PdfReader(str(input_pdf))
 
     before = count_missing_alt(reader)
     table_headers_fixed = 0
@@ -815,18 +739,11 @@ def main() -> int:
     with output_pdf.open("wb") as handle:
         writer.write(handle)
 
-    for temp_path in temp_paths:
-        try:
-            temp_path.unlink()
-        except OSError:
-            pass
-
     print(
         json.dumps(
             {
                 "input_pdf": str(input_pdf),
                 "output_pdf": str(output_pdf),
-                "deleted_pages": args.delete_page,
                 "clean_running_page_numbers": args.clean_running_page_numbers,
                 "missing_alt_before": before,
                 "missing_alt_after": after,
@@ -834,7 +751,6 @@ def main() -> int:
                 "headings_promoted": headings_promoted,
                 "page_number_annots_removed": page_number_annots_removed,
                 "page_number_rects_redacted": 0,
-                "formula_glyph_artifacts_removed": formula_glyph_artifacts_removed,
                 "title": title,
                 "lang": args.lang,
                 "assigned": stats["assigned"],
